@@ -4,9 +4,13 @@
 #include <unistd.h>
 #include <time.h> 
 #include <pthread.h>
+#include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <errno.h>
 #include <stddef.h>
 #include <fcntl.h>
+#include <stdarg.h>
 
 
 #define TIMESIZE 20
@@ -17,21 +21,22 @@
 #define OFF 3
 
 int log_shutdown_signal = 0;
-char log_file_name = "logfile.txt"
+int log_fd;
+char log_file_name[] = "logfile";
 pthread_t log_t;
 
-typedef struct Logger{
+struct logger{
     char *data;
     char *scope;
     int log_level;
-    CIRCLEQ_ENTRY(Logger) next;
-}logger_t;
+    STAILQ_ENTRY(logger) next;
+};
 
-CIRCLEQ_HEAD(logger_c, next);
-struct logger_c logger_head;
+STAILQ_HEAD(logger_c, logger);
+extern struct logger_c *logger_head;
 
 
-int logger_init(char *path);
-void logger_main_loop();
-int log(char *scope, int level, ...) __attribute__((format(printf, 1, 2)));
+int logger_init(char *);
+void* logger_main_loop();
+int logV1(int ,char *,char *, ...)  __attribute__((format(printf, 3, 4)));
 int shutdown_logger();
