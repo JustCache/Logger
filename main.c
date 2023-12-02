@@ -8,9 +8,9 @@ char *construct_file_path(char *path, char **file_name){
     char curr_time[TIMESIZE];
     time(&t);
     strftime(curr_time, sizeof(curr_time), "%d-%m-%Y-%H-%M", localtime(&t));
-    *file_name = (char *)malloc(strlen(path) + strlen(log_file_name) + strlen(curr_time) + 3); // +1 for the null-terminator
-    sprintf(*file_name,"%s/%s-%s.txt",path,log_file_name,curr_time);
-    printf("%s\n",*file_name);
+    size_t file_name_len = strlen(path) + strlen(log_file_name) + strlen(curr_time) + 7; // +1 for the null-terminator +2 for '/' +4 for .txt
+    *file_name = (char *)malloc(file_name_len); 
+    snprintf(*file_name, file_name_len, "%s/%s-%s.txt", path, log_file_name, curr_time);
     return 0;
 }
 
@@ -37,7 +37,7 @@ int logger_init(char *path){
     /* it's a dir */
     char *file_name;
     construct_file_path(path, &file_name);
-    log_fd = open(file_name, O_CREAT |O_RDWR | O_APPEND);
+    log_fd = open(file_name, O_CREAT | O_RDWR | O_APPEND);
 
     if(log_fd < 0){
         printf("errno is %d\n", errno );
@@ -65,17 +65,10 @@ int logV1(int level, char *scope, char *msg, ...){
     va_list args;
     va_start(args, msg);
 
-    if(vasprintf(&log_msg, level, args) < 0){
+    if(vasprintf(&log_msg, msg, args) < 0){
         log_msg = NULL;
     }
-
     va_end(args);
-
-    // if(is_queue_full()){
-    //     perror("logger queue full");
-    //     return 1;
-    // }
-
     struct logger *log_entry = (struct logger *)malloc(sizeof(struct logger));
     log_entry->data = log_msg;
     log_entry->log_level = level;
@@ -100,9 +93,14 @@ int construct_log(struct logger *log_entry, char *msg){
             strcpy(msg, "[DEFAULT]");
             perror("wrong log_level");
     }
-    int len = strlen(msg);
-    printf("scope ");
-    return sprintf(msg+len, " %s %s",log_entry->scope,log_entry->data);
+    int len = strlen(log_entry->scope) + strlen(log_entry->data) + 4; // +2 for spaces +1 for the null-terminator +1 for \n
+    size_t log_len = strlen(msg);
+    if(len+log_len>LOG_SIZE){
+        perror("log size exceded");
+        len = LOG_SIZE-log_len;
+    }
+    log_len += snprintf(msg+strlen(msg), len, " %s %s\n", log_entry->scope, log_entry->data);
+    return log_len;
 }
 
 void* logger_main_loop(){
@@ -116,22 +114,21 @@ void* logger_main_loop(){
             while(log_entry!= NULL){
                 char msg[LOG_SIZE];
                 int len = construct_log(log_entry,msg);
-                printf("msg:%s",msg);
                 write(log_fd, msg, len);
-                next_entry = STAILQ_NEXT(log_entry, next);
+                STAILQ_REMOVE_HEAD(logger_head, next);
+                next_entry = STAILQ_FIRST(logger_head);
                 free(log_entry);
                 log_entry = next_entry;
             }
         }
+        if(log_shutdown_signal == 1){
+            log_shutdown_signal = 2;
+        }
+        if(log_shutdown_signal == 2){
+            break;
+        }
     }
 }
 
-
-void main(){
-    logger_init(".");
-    char msg[] = "testing";
-    logV1(INFO,"hello","%s",msg);
-    pthread_join(log_t, NULL);
-}
 
 

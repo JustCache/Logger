@@ -1,1 +1,5 @@
-gcc main.c -o logger -I.
+CC=gcc
+CFLAGS=-I.
+
+justcache: main.c
+	$(CC) -o logger main.c $(CFLAGS)
