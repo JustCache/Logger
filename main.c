@@ -38,7 +38,7 @@ int logger_init(char *path){
     char *file_name;
     construct_file_path(path, &file_name);
     log_fd = open(file_name, O_CREAT | O_RDWR | O_APPEND);
-
+    free(file_name);
     if(log_fd < 0){
         printf("errno is %d\n", errno );
         return 1;
@@ -69,10 +69,12 @@ int logV1(int level, char *scope, char *msg, ...){
         log_msg = NULL;
     }
     va_end(args);
+    char *log_scope = (char *)malloc(10);
+    strcpy(log_scope,scope);
     struct logger *log_entry = (struct logger *)malloc(sizeof(struct logger));
-    log_entry->data = log_msg;
+    log_entry->data = log_msg;  
     log_entry->log_level = level;
-    log_entry->scope = scope;
+    log_entry->scope = log_scope;
 
     STAILQ_INSERT_TAIL(logger_head, log_entry, next);
     return 0;
@@ -112,21 +114,25 @@ void* logger_main_loop(){
             struct logger *log_entry, *next_entry;
             log_entry = STAILQ_FIRST(logger_head);
             while(log_entry!= NULL){
-                char msg[LOG_SIZE];
+                char *msg = (char *)malloc(LOG_SIZE);
                 int len = construct_log(log_entry,msg);
                 write(log_fd, msg, len);
                 STAILQ_REMOVE_HEAD(logger_head, next);
                 next_entry = STAILQ_FIRST(logger_head);
+                free(log_entry->data);
+                free(log_entry->scope);
                 free(log_entry);
+                free(msg);
                 log_entry = next_entry;
             }
         }
-        if(log_shutdown_signal == 1){
-            log_shutdown_signal = 2;
-        }
         if(log_shutdown_signal == 2){
+            free(logger_head);
             break;
         }
+        if(log_shutdown_signal == 1){
+            log_shutdown_signal = 2;
+        } 
     }
 }
 
